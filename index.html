@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>แสดงข้อความจาก Firestore</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div class="container bg-white w-full max-w-2xl mx-auto p-6 md:p-8 rounded-xl shadow-lg">
+        <div class="text-center">
+            <h2 class="text-2xl md:text-3xl font-bold text-gray-800 mb-2">Real-time Messages with Firestore</h2>
+            <p class="text-gray-500 mb-6">กรอกข้อความแล้วกดปุ่มเพื่อบันทึกและแสดงผล</p>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-3 mb-6">
+            <input type="text" id="textInput" placeholder="ใส่ข้อความหรือตัวเลขที่นี่..." class="flex-grow w-full px-4 py-3 text-base text-gray-700 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+            <button id="saveButton" class="w-full sm:w-auto px-6 py-3 text-base font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-300 shadow-md">
+                บันทึกข้อความ
+            </button>
+        </div>
+
+        <div>
+            <h3 class="text-xl font-semibold text-gray-700 mb-4">ผลลัพธ์ (Real-time):</h3>
+            <div id="resultArea" class="p-4 bg-gray-50 border border-gray-200 rounded-lg min-h-[150px] text-gray-800 space-y-2 text-sm md:text-base overflow-y-auto max-h-96">
+                <p class="text-gray-400">กำลังรอข้อความ...</p>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import functions from the Firebase SDKs
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAXEZdK3Uo7j5Xvor07M5s_7SJE67eLnyo",
+            authDomain: "pzx-989e1.firebaseapp.com",
+            projectId: "pzx-989e1",
+            storageBucket: "pzx-989e1.appspot.com", // Corrected storage bucket domain
+            messagingSenderId: "600460952877",
+            appId: "1:600460952877:web:586b6ade76be6f39413fa4",
+            measurementId: "G-KWEWWXJMNK"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // --- DOM Elements ---
+        const textInput = document.getElementById('textInput');
+        const saveButton = document.getElementById('saveButton');
+        const resultArea = document.getElementById('resultArea');
+        
+        // --- Firestore Collection Reference (EDITED) ---
+        const messagesColRef = collection(db, "messages");
+
+        // --- Authentication ---
+        signInAnonymously(auth).catch((error) => {
+            console.error("Anonymous sign-in failed:", error);
+            resultArea.textContent = "Authentication failed. Cannot connect to the database.";
+        });
+
+        // --- Functions ---
+
+        /**
+         * Saves a new message to the Firestore database.
+         */
+        async function saveMessage() {
+            const messageText = textInput.value.trim();
+
+            if (messageText === "") {
+                // Don't save empty messages
+                return;
+            }
+            
+            saveButton.disabled = true;
+            saveButton.textContent = 'กำลังบันทึก...';
+
+            try {
+                // Add a new document with a generated id to the "messages" collection.
+                await addDoc(messagesColRef, {
+                    text: messageText,
+                    createdAt: serverTimestamp() // Use server timestamp for consistent ordering
+                });
+                // Clear the input field after successful save
+                textInput.value = "";
+            } catch (error) {
+                console.error("Error adding document: ", error);
+                alert("เกิดข้อผิดพลาดในการบันทึกข้อความ"); // Inform user of the error
+            } finally {
+                saveButton.disabled = false;
+                saveButton.textContent = 'บันทึกข้อความ';
+            }
+        }
+
+        /**
+         * Renders the messages into the result area.
+         * @param {Array<object>} messages - An array of message objects from Firestore.
+         */
+        function renderMessages(messages) {
+            // Clear the result area before displaying new data
+            resultArea.innerHTML = '';
+
+            if (messages.length === 0) {
+                resultArea.innerHTML = '<p class="text-gray-400">ยังไม่มีข้อความ... ลองพิมพ์ดูสิ!</p>';
+                return;
+            }
+            
+            // Create and append a paragraph for each message
+            messages.forEach(msg => {
+                const p = document.createElement('p');
+                p.textContent = msg.text;
+                p.className = 'p-2 bg-white rounded-md shadow-sm border-l-4 border-blue-500';
+                resultArea.appendChild(p);
+            });
+            
+            // Scroll to the bottom to see the latest message
+            resultArea.scrollTop = resultArea.scrollHeight;
+        }
+
+
+        // --- Event Listeners ---
+
+        // 1. Listen for clicks on the save button
+        saveButton.addEventListener('click', saveMessage);
+
+        // 2. Allow pressing Enter to save the message
+        textInput.addEventListener('keyup', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault(); // Prevent default form submission
+                saveMessage();
+            }
+        });
+
+        // 3. Set up a real-time listener for messages
+        const q = query(messagesColRef, orderBy("createdAt", "asc")); // Order by creation time
+        
+        onSnapshot(q, (querySnapshot) => {
+            const messages = [];
+            querySnapshot.forEach((doc) => {
+                messages.push(doc.data());
+            });
+            renderMessages(messages);
+        }, (error) => {
+            console.error("Error fetching real-time messages: ", error);
+            resultArea.textContent = "Could not fetch messages from the database.";
+        });
+
+    </script>
+
+</body>
+</html>
